@@ -1,0 +1,57 @@
+# --- Secrets (NEVER commit) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+*.secret
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Build output ---
+dist/
+build/
+coverage/
+coverage.json
+
+# --- Hardhat ---
+cache/
+artifacts/
+typechain/
+typechain-types/
+
+# --- Vercel ---
+.vercel/
+
+# --- Local design handoff bundle (private screenshots etc.) ---
+design-mockup/
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+
+# --- Logs ---
+*.log
+
+# --- Private course docs (kept LOCALLY, never published to GitHub) ---
+/CURRENT_PROJECT_STATE.md
+/DEVELOPMENT.md
+/FINAL-REPORT.md
+/GUIDANCE.md
+/presentation.md
+/docs/ChainForum_Proposal.pdf
+/contracts/GAS-ANALYSIS.md
+/contracts/SECURITY-ANALYSIS.md
+/contracts/gas-benchmarks.md
+/contracts/slither-report.md

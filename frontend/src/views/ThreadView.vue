@@ -1,0 +1,193 @@
+<script setup>
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useForum } from "../composables/useForum";
+import { useIpfs } from "../composables/useIpfs";
+import { useContract } from "../composables/useContract";
+import { useWalletStore } from "../stores/wallet";
+import Identicon from "../components/Identicon.vue";
+import PostBody from "../components/PostBody.vue";
+import PostCard from "../components/PostCard.vue";
+import CreatePostForm from "../components/CreatePostForm.vue";
+import { shortAddr, shortCid, shortTx, dateStr } from "../utils/format";
+
+const route = useRoute();
+const router = useRouter();
+const wallet = useWalletStore();
+const ipfs = useIpfs();
+const { readContract, explorerUrl } = useContract();
+const {
+  posts,
+  votesByPostId,
+  loading,
+  error,
+  loadPostsForThread,
+  notDeployed,
+  watchNewPostsOnThread,
+  watchVotes,
+} = useForum();
+
+const threadMeta = ref(null);
+const focusedPostId = ref(null);
+let stopPostWatch = null;
+let stopVoteWatch = null;
+
+async function load() {
+  const id = route.params.id;
+  threadMeta.value = null;
+  try {
+    const raw = await readContract.value.getThread(id);
+    threadMeta.value = {
+      id: raw.id,
+      author: raw.author,
+      contentHash: raw.contentHash,
+      timestamp: Number(raw.timestamp),
+    };
+  } catch {
+    threadMeta.value = null;
+  }
+  await loadPostsForThread(id);
+  if (threadMeta.value?.contentHash) {
+    try {
+      const body = await ipfs.fetchJson(threadMeta.value.contentHash);
+      threadMeta.value = { ...threadMeta.value, body };
+    } catch {
+      /* leave body unset */
+    }
+  }
+}
+
+function teardownWatchers() {
+  stopPostWatch?.();
+  stopVoteWatch?.();
+  stopPostWatch = null;
+  stopVoteWatch = null;
+}
+
+async function loadAndWatch() {
+  teardownWatchers();
+  await load();
+  if (threadMeta.value) {
+    try {
+      stopPostWatch = watchNewPostsOnThread(route.params.id);
+      stopVoteWatch = watchVotes();
+    } catch {
+      /* listener attach can fail; non-fatal */
+    }
+  }
+  focusedPostId.value = route.query.focusPost
+    ? String(route.query.focusPost)
+    : null;
+  if (focusedPostId.value) {
+    // try repeatedly until DOM has rendered the target
+    [50, 200, 450, 900].forEach((t) =>
+      setTimeout(() => {
+        const el = document.getElementById("post-" + focusedPostId.value);
+        if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      }, t)
+    );
+  }
+}
+
+function clearFocus() {
+  focusedPostId.value = null;
+}
+
+function scrollToReply(postNo) {
+  focusedPostId.value = String(postNo);
+  setTimeout(() => {
+    const el = document.getElementById("post-" + postNo);
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, 30);
+}
+
+function back() {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push("/");
+  }
+}
+
+const canGoBack = computed(() => window.history.length > 1);
+
+onMounted(loadAndWatch);
+watch(() => route.params.id, loadAndWatch);
+onUnmounted(teardownWatchers);
+</script>
+
+<template>
+  <a class="back-link" href="#" @click.prevent="back" v-if="canGoBack">
+    <span class="arr">←</span> Back
+  </a>
+
+  <div v-if="notDeployed()" class="info">Contract address not set.</div>
+  <div v-else-if="!threadMeta && !loading" class="error">
+    Thread #{{ route.params.id }} not found on-chain.
+  </div>
+
+  <template v-if="threadMeta">
+    <div class="crumb-bar">
+      <a href="#" @click.prevent="router.push('/')">/3can/</a>
+      <span class="sep">›</span>
+      <span>thread No.{{ threadMeta.id }}</span>
+      <span class="sep">·</span>
+      <span class="mono">{{ dateStr(threadMeta.timestamp) }}</span>
+      <span class="sep">·</span>
+      <a :href="explorerUrl(threadMeta.contentHash, 'address')" target="_blank" rel="noopener">Etherscan</a>
+      <span class="sep">·</span>
+      <a :href="ipfs.gatewayUrl(threadMeta.contentHash)" target="_blank" rel="noopener">IPFS</a>
+    </div>
+
+    <article class="op-post">
+      <div class="op-meta">
+        <span class="subj">{{ threadMeta.body?.title || `Thread #${threadMeta.id}` }}</span>
+        <span class="anon">Anonymous</span>
+        <Identicon :address="threadMeta.author" :size="14" />
+        <a class="addr" href="#" @click.prevent="router.push(`/profile/${threadMeta.author}`)">
+          {{ shortAddr(threadMeta.author) }}
+        </a>
+        <span class="date">{{ dateStr(threadMeta.timestamp) }}</span>
+        <span class="no">No.<a href="#" @click.prevent>{{ threadMeta.id }}</a></span>
+      </div>
+      <div class="post-body" v-if="threadMeta.body?.body">
+        <PostBody :text="threadMeta.body.body" />
+      </div>
+      <div class="post-body muted" v-else-if="threadMeta.contentHash">
+        Body CID:
+        <a :href="ipfs.gatewayUrl(threadMeta.contentHash)" target="_blank" rel="noopener">
+          {{ shortCid(threadMeta.contentHash) }}
+        </a>
+      </div>
+      <div class="op-foot">
+        <span><span class="k">cid:</span> {{ shortCid(threadMeta.contentHash) }}</span>
+        <span><span class="k">replies:</span> {{ posts.length }}</span>
+      </div>
+    </article>
+  </template>
+
+  <div v-if="error" class="error">{{ error }}</div>
+
+  <div @click="clearFocus">
+    <PostCard
+      v-for="p in posts"
+      :key="p.postId"
+      :post="p"
+      :thread="threadMeta"
+      :votes="votesByPostId[p.postId] ?? 0"
+      :focused="focusedPostId === p.postId"
+      :mine="wallet.address && p.author.toLowerCase() === wallet.address.toLowerCase()"
+      @quote-click="scrollToReply"
+    />
+  </div>
+
+  <CreatePostForm
+    v-if="wallet.isConnected && wallet.isOnSepolia && !notDeployed() && threadMeta"
+    :thread-id="route.params.id"
+    :first-post-id="posts[0]?.postId"
+    @created="loadAndWatch"
+  />
+  <div v-else-if="!wallet.isConnected" class="info">
+    Connect your wallet to reply.
+  </div>
+</template>
