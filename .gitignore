@@ -44,14 +44,5 @@ desktop.ini
 # --- Logs ---
 *.log
 
-# --- Private course docs (kept LOCALLY, never published to GitHub) ---
-/CURRENT_PROJECT_STATE.md
-/DEVELOPMENT.md
-/FINAL-REPORT.md
-/GUIDANCE.md
-/presentation.md
-/docs/ChainForum_Proposal.pdf
-/contracts/GAS-ANALYSIS.md
-/contracts/SECURITY-ANALYSIS.md
-/contracts/gas-benchmarks.md
-/contracts/slither-report.md
+# --- Private course docs (kept LOCALLY in docs/, never published to GitHub) ---
+/docs/
