@@ -22,6 +22,7 @@ export const useWalletStore = defineStore("wallet", {
     needsContractDeploy: () =>
       config.contractAddress ===
       "0x0000000000000000000000000000000000000000",
+    hasMetaMask: () => typeof window !== "undefined" && !!window.ethereum,
   },
   actions: {
     async init() {
@@ -134,6 +135,10 @@ export const useWalletStore = defineStore("wallet", {
       this.chainId = null;
       this.provider = null;
       this.balance = null;
+    },
+
+    dismissError() {
+      this.error = null;
     },
   },
 });

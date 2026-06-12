@@ -22,6 +22,10 @@ const boards = [
 
 const isHome = computed(() => route.name === "home");
 
+const needsInstall = computed(
+  () => !!wallet.error && /not detected|install/i.test(wallet.error)
+);
+
 const balanceShort = computed(() => {
   if (wallet.balance === null || wallet.balance === undefined) return null;
   const n = parseFloat(wallet.balance);
@@ -91,6 +95,19 @@ async function enableNotifications() {
       </span>
     </span>
   </div>
+
+  <div v-if="wallet.error" class="wallet-error-bar">
+    <span class="msg">⚠ {{ wallet.error }}</span>
+    <a
+      v-if="needsInstall"
+      class="install-link"
+      href="https://metamask.io/download/"
+      target="_blank"
+      rel="noopener"
+      >Install MetaMask →</a
+    >
+    <span class="x" @click="wallet.dismissError()" title="dismiss">×</span>
+  </div>
 </template>
 
 <style scoped>
@@ -105,5 +122,30 @@ async function enableNotifications() {
 }
 .brackets-btn:hover {
   color: var(--link-hover);
+}
+.wallet-error-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  background: #ffe6e6;
+  border-bottom: 1px solid #e3a9a9;
+  color: #8a1f1f;
+  font-size: 12px;
+}
+.wallet-error-bar .msg {
+  font-weight: 600;
+}
+.wallet-error-bar .install-link {
+  color: #8a1f1f;
+  font-weight: 700;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.wallet-error-bar .x {
+  margin-left: auto;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0 4px;
 }
 </style>
