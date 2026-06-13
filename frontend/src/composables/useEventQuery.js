@@ -1,17 +1,19 @@
 /**
- * eth_getLogs is capped per request, and the cap depends on the provider:
- * Infura / Alchemy / MetaMask allow ~10k blocks; the public nodes allow up to
- * ~50k. 9_000 stays under the strictest cap, so the SAME call succeeds whether
- * a read goes through a connected wallet (MetaMask -> Infura) or a public
- * fallback. A larger window fails with "block range too large" — which ethers
- * often surfaces as "could not coalesce error" — exactly when a wallet is
- * connected, i.e. right when you post and then refresh.
+ * eth_getLogs is capped per request. Reads run through the dedicated/public read
+ * providers (never the wallet), and those allow large windows: publicnode caps
+ * at 50k blocks, tenderly takes the whole range. 45k stays under publicnode's
+ * 50k while keeping the chunk count tiny (~5 for the current deploy->head span).
+ * A capped dedicated RPC (e.g. Alchemy free tier, 10 blocks) just errors on the
+ * first chunk and the caller rotates to a public node — see isNetworkError.
  *
- * queryFilterChunked walks the range in CHUNK_SIZE windows, returns the
- * concatenated event list. Block ranges are inclusive on both ends per the
- * JSON-RPC spec (fromBlock = toBlock works).
+ * queryFilterChunked splits the range into CHUNK_SIZE windows and fetches them
+ * with bounded concurrency, then returns the concatenated events. Sequential
+ * fetching was ~22 round-trips per filter at 9k (seconds of latency); batching
+ * collapses that to one or two parallel rounds. Block ranges are inclusive on
+ * both ends per the JSON-RPC spec (fromBlock = toBlock works).
  */
-const CHUNK_SIZE = 9_000; // under the strictest (Infura/Alchemy/MetaMask) 10k cap
+const CHUNK_SIZE = 45_000; // under publicnode's 50k cap; ~5 chunks for the range
+const CONCURRENCY = 8; // parallel getLogs in flight per filter
 
 export async function queryFilterChunked(contract, filter, fromBlock, toBlock) {
   const provider = contract.runner?.provider || contract.runner;
@@ -23,13 +25,23 @@ export async function queryFilterChunked(contract, filter, fromBlock, toBlock) {
 
   if (start > head) return [];
 
+  // Build every [from, to] window up front...
+  const ranges = [];
+  for (let cursor = start; cursor <= head; cursor += CHUNK_SIZE) {
+    ranges.push([cursor, Math.min(cursor + CHUNK_SIZE - 1, head)]);
+  }
+
+  // ...then fetch them in bounded-concurrency batches. A single chunk failure
+  // rejects its batch, which bubbles up so the caller can rotate providers.
   const all = [];
-  let cursor = start;
-  while (cursor <= head) {
-    const end = Math.min(cursor + CHUNK_SIZE - 1, head);
-    const events = await contract.queryFilter(filter, cursor, end);
-    if (events.length > 0) all.push(...events);
-    cursor = end + 1;
+  for (let i = 0; i < ranges.length; i += CONCURRENCY) {
+    const batch = ranges.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(([from, to]) => contract.queryFilter(filter, from, to))
+    );
+    for (const events of results) {
+      if (events.length > 0) all.push(...events);
+    }
   }
   return all;
 }

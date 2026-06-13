@@ -7,16 +7,19 @@ import config from "../config.json";
 // Sepolia, pinned so ethers never re-runs eth_chainId network detection.
 const SEPOLIA = Network.from(11155111);
 
-// A dedicated RPC (Alchemy / Infura free tier) is far more reliable than the
-// shared public nodes. If VITE_SEPOLIA_RPC_URL is set it goes first; the public
-// nodes stay as automatic fallbacks for when it cold-starts / rate-limits /
-// CORS-fails. rotateReadProvider() advances to the next on a network error.
+// Read providers, in priority order. The public nodes lead because they handle
+// our wide eth_getLogs scans fast (publicnode up to 50k blocks, tenderly the
+// whole range). A dedicated RPC via VITE_SEPOLIA_RPC_URL goes LAST as a deep
+// fallback: the common free tiers (e.g. Alchemy's 10-block getLogs cap) can't
+// serve the event scans and only add failover latency on the hot path, so they
+// must not lead. rotateReadProvider() advances to the next on a network error.
 const ENV_RPC = import.meta.env.VITE_SEPOLIA_RPC_URL;
 const FALLBACK_RPCS = [
-  ...(ENV_RPC ? [ENV_RPC] : []),
-  "https://ethereum-sepolia-rpc.publicnode.com",
-  "https://eth-sepolia.public.blastapi.io",
-  "https://sepolia.gateway.tenderly.co",
+  "https://ethereum-sepolia-rpc.publicnode.com", // up to 50k blocks per getLogs
+  "https://sepolia.gateway.tenderly.co", // handles the full deploy->head range
+  ...(ENV_RPC ? [ENV_RPC] : []), // dedicated RPC: deep fallback only
+  // NOTE: eth-sepolia.public.blastapi.io was removed — Blast API shut down and
+  // now returns "Blast API is no longer available" for every request.
 ];
 
 const rpcGen = ref(0); // bump to invalidate any computed that read getReadProvider()
