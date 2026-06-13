@@ -15,7 +15,7 @@ const props = defineProps({
   focused: { type: Boolean, default: false },
   mine: { type: Boolean, default: false },
 });
-const emit = defineEmits(["voted", "quoteClick"]);
+const emit = defineEmits(["voted", "quoteClick", "quotePost"]);
 
 const router = useRouter();
 const ipfs = useIpfs();
@@ -61,7 +61,8 @@ function openProfile(e) {
           {{ shortAddr(post.author) }}
         </a>
         <span class="date">{{ dateStr(post.timestamp) }}</span>
-        <span class="no">No.<a href="#" @click.prevent="emit('quoteClick', post.postId)">{{ post.postId }}</a></span>
+        <span class="no">No.<a href="#" @click.prevent="emit('quotePost', post.postId)" title="Quote this post in your reply">{{ post.postId }}</a></span>
+        <a class="qreply" href="#" @click.prevent="emit('quotePost', post.postId)" title="Reply to this post">↩ reply</a>
         <VoteButton
           :post-id="post.postId"
           :votes="votes"

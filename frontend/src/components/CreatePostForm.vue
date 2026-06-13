@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from "vue";
+import { ref, watch, nextTick } from "vue";
 import { useContract } from "../composables/useContract";
 import { useIpfs } from "../composables/useIpfs";
 import { useWalletStore } from "../stores/wallet";
@@ -8,6 +8,7 @@ import { shortAddr } from "../utils/format";
 const props = defineProps({
   threadId: { type: [String, Number], required: true },
   firstPostId: { type: [String, Number], default: null },
+  quoteSignal: { type: Object, default: null },
 });
 const emit = defineEmits(["created"]);
 
@@ -19,6 +20,20 @@ const body = ref("");
 const submitting = ref(false);
 const error = ref(null);
 const successTx = ref(null);
+const ta = ref(null);
+
+// ThreadView bumps quoteSignal when a post's No./↩ is clicked — prepend ">>N"
+// to the current draft and focus the box so the user can keep typing.
+watch(
+  () => props.quoteSignal,
+  (sig) => {
+    if (!sig || sig.postId == null) return;
+    const marker = ">>" + sig.postId + "\n";
+    const cur = body.value;
+    body.value = cur && !cur.endsWith("\n") ? cur + "\n" + marker : cur + marker;
+    nextTick(() => ta.value && ta.value.focus());
+  }
+);
 
 async function submit() {
   if (!body.value.trim()) {
@@ -68,6 +83,7 @@ function clear() {
       <input class="subj-in" :value="`No.${threadId}`" disabled />
     </div>
     <textarea
+      ref="ta"
       v-model="body"
       :placeholder="`Start a line with > for greentext.\nUse >>${firstPostId ?? '101'} to quote another post.`"
       maxlength="4000"

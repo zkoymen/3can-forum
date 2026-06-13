@@ -31,6 +31,8 @@ const {
 const threadMeta = ref(null);
 const threadStatus = ref("loading"); // "loading" | "ok" | "missing" | "error"
 const focusedPostId = ref(null);
+const quoteSignal = ref(null); // { postId, seq } — pushes a >>N into the reply box
+let quoteSeq = 0;
 let stopPostWatch = null;
 let stopVoteWatch = null;
 
@@ -102,6 +104,17 @@ function scrollToReply(postNo) {
   focusedPostId.value = String(postNo);
   setTimeout(() => {
     const el = document.getElementById("post-" + postNo);
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, 30);
+}
+
+// Click a post's No./↩ to quote it: bump the signal so the reply form prepends
+// >>N, then scroll the composer into view.
+function quoteInReply(postId) {
+  quoteSeq += 1;
+  quoteSignal.value = { postId, seq: quoteSeq };
+  setTimeout(() => {
+    const el = document.getElementById("reply-box");
     if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
   }, 30);
 }
@@ -190,13 +203,16 @@ onUnmounted(teardownWatchers);
       :focused="focusedPostId === p.postId"
       :mine="wallet.address && p.author.toLowerCase() === wallet.address.toLowerCase()"
       @quote-click="scrollToReply"
+      @quote-post="quoteInReply"
     />
   </div>
 
   <CreatePostForm
     v-if="wallet.isConnected && wallet.isOnSepolia && !notDeployed() && threadMeta"
+    id="reply-box"
     :thread-id="route.params.id"
     :first-post-id="posts[0]?.postId"
+    :quote-signal="quoteSignal"
     @created="loadAndWatch"
   />
   <div v-else-if="!wallet.isConnected" class="info">
