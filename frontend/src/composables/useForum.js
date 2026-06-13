@@ -17,8 +17,32 @@ function isNetworkError(e) {
     m.includes("timeout") ||
     m.includes("server response 5") ||
     m.includes("could not coalesce") ||
-    m.includes("exceed maximum block range")
+    m.includes("exceed maximum block range") ||
+    m.includes("too many requests") ||
+    m.includes("rate limit") ||
+    m.includes("429") ||
+    // getLogs range/size caps (e.g. Alchemy free tier's 10-block limit, Infura's
+    // 10k-result cap). Treat as retryable so we rotate to a provider that allows
+    // our chunk size instead of surfacing the error.
+    m.includes("block range") ||
+    m.includes("query returned more than") ||
+    m.includes("response size") ||
+    m.includes("up to a")
   );
+}
+
+// Tells a genuinely-missing thread apart from a transient RPC failure.
+// getThread() reverts with ThreadDoesNotExist when the thread really isn't
+// on-chain; ethers surfaces a contract revert as code CALL_EXCEPTION, and that
+// is the ONLY revert getThread can produce. A network/rate-limit failure is a
+// different code (and matches isNetworkError) — those we retry, not report as
+// "not found".
+function isMissingThreadRevert(e) {
+  if (e?.revert?.name === "ThreadDoesNotExist") return true;
+  if ((e?.message || "").toLowerCase().includes("threaddoesnotexist")) {
+    return true;
+  }
+  return e?.code === "CALL_EXCEPTION" && !isNetworkError(e);
 }
 
 /**
@@ -76,6 +100,41 @@ export function useForum() {
       error.value = e.shortMessage || e.message || String(e);
     } finally {
       if (attempt === 0) loading.value = false;
+    }
+  }
+
+  /**
+   * Reads a single thread's on-chain metadata with provider rotation/retry.
+   * Returns:
+   *   { ok: true, meta }            -> thread exists
+   *   { ok: false, missing: true }  -> thread genuinely not on-chain (revert)
+   *   { ok: false, error }          -> RPC failed after retries (NOT "missing")
+   * Distinguishing the last two is what stops a rate-limited read from being
+   * mislabelled "Thread #N not found on-chain".
+   */
+  async function fetchThreadMeta(threadId, attempt = 0) {
+    try {
+      const raw = await readContract.value.getThread(threadId);
+      return {
+        ok: true,
+        meta: {
+          id: raw.id,
+          author: raw.author,
+          contentHash: raw.contentHash,
+          timestamp: Number(raw.timestamp),
+        },
+      };
+    } catch (e) {
+      if (isMissingThreadRevert(e)) return { ok: false, missing: true };
+      if (attempt + 1 < FALLBACK_RPC_COUNT && isNetworkError(e)) {
+        rotateReadProvider();
+        return fetchThreadMeta(threadId, attempt + 1);
+      }
+      return {
+        ok: false,
+        missing: false,
+        error: e.shortMessage || e.message || String(e),
+      };
     }
   }
 
@@ -254,6 +313,7 @@ export function useForum() {
     loading,
     error,
     loadThreads,
+    fetchThreadMeta,
     loadPostsForThread,
     loadVotesFor,
     loadAllPostCounts,

@@ -15,12 +15,13 @@ const route = useRoute();
 const router = useRouter();
 const wallet = useWalletStore();
 const ipfs = useIpfs();
-const { readContract, explorerUrl } = useContract();
+const { explorerUrl } = useContract();
 const {
   posts,
   votesByPostId,
   loading,
   error,
+  fetchThreadMeta,
   loadPostsForThread,
   notDeployed,
   watchNewPostsOnThread,
@@ -28,6 +29,7 @@ const {
 } = useForum();
 
 const threadMeta = ref(null);
+const threadStatus = ref("loading"); // "loading" | "ok" | "missing" | "error"
 const focusedPostId = ref(null);
 let stopPostWatch = null;
 let stopVoteWatch = null;
@@ -35,17 +37,20 @@ let stopVoteWatch = null;
 async function load() {
   const id = route.params.id;
   threadMeta.value = null;
-  try {
-    const raw = await readContract.value.getThread(id);
-    threadMeta.value = {
-      id: raw.id,
-      author: raw.author,
-      contentHash: raw.contentHash,
-      timestamp: Number(raw.timestamp),
-    };
-  } catch {
-    threadMeta.value = null;
+  threadStatus.value = "loading";
+
+  const res = await fetchThreadMeta(id);
+  if (res.ok) {
+    threadMeta.value = res.meta;
+    threadStatus.value = "ok";
+  } else if (res.missing) {
+    threadStatus.value = "missing"; // genuinely not on-chain
+    return;
+  } else {
+    threadStatus.value = "error"; // RPC failed after retries — offer a retry
+    return;
   }
+
   await loadPostsForThread(id);
   if (threadMeta.value?.contentHash) {
     try {
@@ -122,8 +127,15 @@ onUnmounted(teardownWatchers);
   </a>
 
   <div v-if="notDeployed()" class="info">Contract address not set.</div>
-  <div v-else-if="!threadMeta && !loading" class="error">
+  <div v-else-if="threadStatus === 'loading' && !threadMeta" class="info">
+    Loading thread #{{ route.params.id }}…
+  </div>
+  <div v-else-if="threadStatus === 'missing'" class="error">
     Thread #{{ route.params.id }} not found on-chain.
+  </div>
+  <div v-else-if="threadStatus === 'error'" class="error">
+    Couldn’t reach the network while loading thread #{{ route.params.id }}.
+    <a href="#" @click.prevent="loadAndWatch">Retry</a>
   </div>
 
   <template v-if="threadMeta">

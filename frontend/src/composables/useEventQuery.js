@@ -1,14 +1,17 @@
 /**
- * Public Sepolia RPCs (publicnode, blastapi, tenderly) cap eth_getLogs at
- * 50k blocks per request. The contract was deployed at ~10.8M; current head
- * is well past 13M, so single-shot queryFilter fails with
- * "exceed maximum block range" / "could not coalesce error".
+ * eth_getLogs is capped per request, and the cap depends on the provider:
+ * Infura / Alchemy / MetaMask allow ~10k blocks; the public nodes allow up to
+ * ~50k. 9_000 stays under the strictest cap, so the SAME call succeeds whether
+ * a read goes through a connected wallet (MetaMask -> Infura) or a public
+ * fallback. A larger window fails with "block range too large" — which ethers
+ * often surfaces as "could not coalesce error" — exactly when a wallet is
+ * connected, i.e. right when you post and then refresh.
  *
  * queryFilterChunked walks the range in CHUNK_SIZE windows, returns the
  * concatenated event list. Block ranges are inclusive on both ends per the
  * JSON-RPC spec (fromBlock = toBlock works).
  */
-const CHUNK_SIZE = 49_500; // a bit under 50k to be safe across providers
+const CHUNK_SIZE = 9_000; // under the strictest (Infura/Alchemy/MetaMask) 10k cap
 
 export async function queryFilterChunked(contract, filter, fromBlock, toBlock) {
   const provider = contract.runner?.provider || contract.runner;
