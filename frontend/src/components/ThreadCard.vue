@@ -71,7 +71,7 @@ onMounted(async () => {
         <template v-else>Loading…</template>
       </div>
       <div v-if="previewText" class="preview">
-        <PostBody :text="previewText" />
+        <PostBody :text="previewText" preview />
       </div>
     </div>
     <div class="tile-foot">

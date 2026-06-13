@@ -685,6 +685,12 @@ hr {
   cursor: pointer;
 }
 .post-body .qref:hover { color: var(--link-hover); }
+.post-body a.linkified {
+  color: var(--link);
+  text-decoration: underline;
+  word-break: break-all;
+}
+.post-body a.linkified:hover { color: var(--link-hover); }
 
 .op-foot {
   margin-top: 8px;
@@ -790,6 +796,8 @@ hr {
 .reply-meta .no { color: var(--ink-2); }
 .reply-meta .no a { color: var(--link); text-decoration: none; cursor: pointer; }
 .reply-meta .no a:hover { color: var(--link-hover); }
+.reply-meta .qreply { color: var(--link); text-decoration: none; cursor: pointer; font-size: 11px; }
+.reply-meta .qreply:hover { color: var(--link-hover); text-decoration: underline; }
 .reply-meta .addr {
   font-family: var(--f-mono);
   font-size: 10.5px;
