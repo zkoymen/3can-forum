@@ -8,6 +8,7 @@ export default createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/", name: "home", component: HomeView },
+    { path: "/b/:board", name: "board", component: HomeView },
     { path: "/thread/:id", name: "thread", component: ThreadView },
     {
       path: "/profile/:address",

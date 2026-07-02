@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import { useForum } from "../composables/useForum";
 import { useWalletStore } from "../stores/wallet";
 import { useBookmarks } from "../composables/useBookmarks";
+import { boardBySlug, normalizeBoard } from "../boards";
 import BoardHeader from "../components/BoardHeader.vue";
 import Sidebar from "../components/Sidebar.vue";
 import ThreadCard from "../components/ThreadCard.vue";
@@ -10,12 +12,16 @@ import ComposeModal from "../components/ComposeModal.vue";
 
 const wallet = useWalletStore();
 const bookmarks = useBookmarks();
+const route = useRoute();
 const {
   threads,
   postCountByThread,
+  boardById,
+  boardsResolved,
   loading,
   error,
   loadThreads,
+  resolveBoards,
   loadAllPostCounts,
   notDeployed,
   watchNewThreads,
@@ -27,8 +33,34 @@ const showBody = ref("on");
 const composeOpen = ref(false);
 let stopWatch = null;
 
+// Active board comes from the /b/:board route param. "" = the all view (/).
+// A param that isn't a real slug is treated as an unknown board (empty listing).
+const activeBoard = computed(() => normalizeBoard(route.params.board));
+const activeBoardMeta = computed(() => boardBySlug(activeBoard.value));
+const invalidBoard = computed(
+  () => !!route.params.board && !activeBoardMeta.value
+);
+
+// Live per-board thread tallies for the sidebar, from resolved boards.
+const boardCounts = computed(() => {
+  const counts = {};
+  for (const slug of Object.values(boardById.value)) {
+    if (slug) counts[slug] = (counts[slug] || 0) + 1;
+  }
+  return counts;
+});
+
+// Restrict to the active board before sorting. On the all view, everything.
+const boardScoped = computed(() => {
+  if (invalidBoard.value) return [];
+  if (!activeBoard.value) return threads.value;
+  return threads.value.filter(
+    (t) => boardById.value[t.threadId] === activeBoard.value
+  );
+});
+
 const sorted = computed(() => {
-  let list = [...threads.value];
+  let list = [...boardScoped.value];
   if (sort.value === "bump") {
     list.sort((a, b) => b.blockNumber - a.blockNumber);
   } else if (sort.value === "creation") {
@@ -57,6 +89,7 @@ const tileGrid = computed(() => ({
 async function refresh() {
   await loadThreads();
   loadAllPostCounts();
+  resolveBoards(); // background: fills board filters + sidebar counts
 }
 
 function openCompose() {
@@ -93,7 +126,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <BoardHeader :thread-count="threads.length" @compose="openCompose" />
+  <BoardHeader
+    :thread-count="threads.length"
+    :board="activeBoardMeta"
+    @compose="openCompose"
+  />
 
   <div v-if="notDeployed()" class="info">
     The contract address has not been set yet. Deploy <code>Forum.sol</code> to
@@ -138,8 +175,12 @@ onUnmounted(() => {
 
   <div class="cols">
     <div>
+      <div v-if="invalidBoard" class="info">
+        Unknown board <code>/{{ route.params.board }}/</code>. Pick a board from
+        the list, or go back to <RouterLink to="/">/3can/</RouterLink>.
+      </div>
       <div
-        v-if="!loading && threads.length === 0 && !notDeployed()"
+        v-else-if="!loading && threads.length === 0 && !notDeployed()"
         class="info"
       >
         No threads yet. Be the first to post.
@@ -150,6 +191,18 @@ onUnmounted(() => {
       >
         No bookmarked threads. Tap ☆ on any tile to save it.
       </div>
+      <div
+        v-else-if="activeBoard && !boardsResolved && sorted.length === 0"
+        class="info"
+      >
+        Loading /{{ activeBoard }}/…
+      </div>
+      <div
+        v-else-if="activeBoard && boardsResolved && sorted.length === 0"
+        class="info"
+      >
+        No threads on <code>/{{ activeBoard }}/</code> yet. Be the first to post.
+      </div>
       <div class="catalog" :style="tileGrid">
         <ThreadCard
           v-for="t in sorted"
@@ -159,11 +212,12 @@ onUnmounted(() => {
         />
       </div>
     </div>
-    <Sidebar />
+    <Sidebar :counts="boardCounts" :active-board="activeBoard" />
   </div>
 
   <ComposeModal
     v-if="composeOpen"
+    :default-board="activeBoard"
     @close="composeOpen = false"
     @created="
       composeOpen = false;

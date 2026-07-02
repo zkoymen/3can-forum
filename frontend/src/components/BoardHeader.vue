@@ -1,15 +1,23 @@
 <script setup>
+import { computed } from "vue";
 import { useChainMeta } from "../composables/useChainMeta";
 import CanLogo from "./CanLogo.vue";
 import config from "../config.json";
 import { shortAddr } from "../utils/format";
 
-defineProps({
+const props = defineProps({
   threadCount: { type: Number, default: 0 },
+  board: { type: Object, default: null }, // { slug, name } or null for the all view
 });
 const emit = defineEmits(["compose"]);
 
 const { blockNumber, gasGwei } = useChainMeta();
+
+const boardTitle = computed(() =>
+  props.board
+    ? `/${props.board.slug}/ — ${props.board.name}`
+    : "/3can/ — Decentralized Forum"
+);
 
 function compose(e) {
   e.preventDefault();
@@ -25,7 +33,7 @@ function compose(e) {
       <span class="brand-tag">on-chain bulletin board · sepolia testnet</span>
     </div>
 
-    <div class="board-title">/3can/ — Decentralized Forum</div>
+    <div class="board-title">{{ boardTitle }}</div>
     <hr />
 
     <div class="new-thread-line">

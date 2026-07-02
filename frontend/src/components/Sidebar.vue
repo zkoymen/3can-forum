@@ -4,22 +4,24 @@ import { RouterLink } from "vue-router";
 import { useWalletStore } from "../stores/wallet";
 import { useMempool } from "../composables/useMempool";
 import { useContract } from "../composables/useContract";
+import { BOARDS } from "../boards";
 import Identicon from "./Identicon.vue";
 import { shortAddr } from "../utils/format";
 import config from "../config.json";
+
+const props = defineProps({
+  counts: { type: Object, default: () => ({}) }, // slug -> thread count
+  activeBoard: { type: String, default: "" }, // slug of the board being viewed
+});
 
 const wallet = useWalletStore();
 const mempool = useMempool();
 const { explorerUrl } = useContract();
 
-const boards = [
-  { tag: "/g/", name: "tech & code", count: 0 },
-  { tag: "/d/", name: "design", count: 0 },
-  { tag: "/w3/", name: "web3 & wallets", count: 0 },
-  { tag: "/a/", name: "art & media", count: 0 },
-  { tag: "/p/", name: "philosophy", count: 0 },
-  { tag: "/r/", name: "random", count: 0 },
-];
+const boards = BOARDS;
+function countFor(slug) {
+  return props.counts[slug] ?? 0;
+}
 
 const balanceShort = computed(() => {
   if (!wallet.balance) return "—";
@@ -83,17 +85,17 @@ const balanceShort = computed(() => {
     <div class="panel">
       <div class="panel-head">Boards</div>
       <div class="panel-body board-list">
-        <a
+        <RouterLink
           v-for="b in boards"
-          :key="b.tag"
+          :key="b.slug"
           class="board-pill"
-          href="#"
-          @click.prevent
+          :class="{ active: b.slug === activeBoard }"
+          :to="`/b/${b.slug}`"
         >
-          <span class="tag">{{ b.tag }}</span>
+          <span class="tag">/{{ b.slug }}/</span>
           <span class="name">{{ b.name }}</span>
-          <span class="count">soon</span>
-        </a>
+          <span class="count">{{ countFor(b.slug) }}</span>
+        </RouterLink>
       </div>
     </div>
 

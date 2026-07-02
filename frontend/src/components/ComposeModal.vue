@@ -3,14 +3,20 @@ import { computed, ref } from "vue";
 import { useContract } from "../composables/useContract";
 import { useIpfs } from "../composables/useIpfs";
 import { useWalletStore } from "../stores/wallet";
+import { BOARDS, DEFAULT_BOARD, normalizeBoard } from "../boards";
 import { shortAddr } from "../utils/format";
 
+const props = defineProps({
+  defaultBoard: { type: String, default: "" }, // preselect when composing from a board page
+});
 const emit = defineEmits(["close", "created"]);
 
 const { writeContract } = useContract();
 const ipfs = useIpfs();
 const wallet = useWalletStore();
 
+const boards = BOARDS;
+const board = ref(normalizeBoard(props.defaultBoard) || DEFAULT_BOARD);
 const title = ref("");
 const body = ref("");
 const submitting = ref(false);
@@ -28,6 +34,7 @@ async function submit() {
     const payload = {
       title: title.value.trim(),
       body: body.value.trim(),
+      board: board.value,
       createdAt: new Date().toISOString(),
       kind: "thread",
     };
@@ -48,7 +55,7 @@ async function submit() {
   <div class="scrim" @click="emit('close')">
     <div class="modal" @click.stop>
       <div class="title-bar">
-        <span>Start a new thread on /3can/</span>
+        <span>Start a new thread on /{{ board }}/</span>
         <span class="x" @click="emit('close')">×</span>
       </div>
       <div class="modal-body">
@@ -59,6 +66,13 @@ async function submit() {
           }}</b>
           · body pins to IPFS · signed into <code>createThread()</code>
         </div>
+
+        <label>Board</label>
+        <select class="field" v-model="board" :disabled="submitting">
+          <option v-for="b in boards" :key="b.slug" :value="b.slug">
+            /{{ b.slug }}/ — {{ b.name }}
+          </option>
+        </select>
 
         <label>Subject</label>
         <input

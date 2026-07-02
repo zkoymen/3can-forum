@@ -570,6 +570,8 @@ hr {
   color: var(--ink);
 }
 .board-pill:hover { background: #EEF2FF; color: var(--ink); text-decoration: none; }
+.board-pill.active { background: #E0E7FF; }
+.board-pill.active .name { color: var(--ink); font-weight: 600; }
 .board-pill .tag { color: var(--red); font-weight: bold; font-family: var(--f-sans); }
 .board-pill .name { flex: 1; color: var(--ink-2); }
 .board-pill .count { color: var(--ink-dim); font-family: var(--f-mono); font-size: 10.5px; }

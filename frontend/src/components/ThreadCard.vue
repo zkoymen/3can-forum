@@ -6,6 +6,7 @@ import { useBookmarks } from "../composables/useBookmarks";
 import Identicon from "./Identicon.vue";
 import PostBody from "./PostBody.vue";
 import { shortAddr, timeAgo, previewBody } from "../utils/format";
+import { normalizeBoard } from "../boards";
 
 const props = defineProps({
   thread: { type: Object, required: true },
@@ -23,6 +24,12 @@ const bookmarked = computed(() => bookmarks.has(props.thread.threadId));
 const previewText = computed(() => {
   if (!body.value) return "";
   return previewBody(body.value.body || "", 180);
+});
+
+// Board tag from the thread's IPFS payload; legacy threads without one show /3can/.
+const boardTag = computed(() => {
+  const slug = normalizeBoard(body.value?.board);
+  return slug ? `/${slug}/` : "/3can/";
 });
 
 function open() {
@@ -54,7 +61,7 @@ onMounted(async () => {
   <div class="tile" @click="open">
     <div class="tile-head">
       <span class="pn">No.{{ thread.threadId }}</span>
-      <span class="tag">/3can/</span>
+      <span class="tag">{{ boardTag }}</span>
       <button
         class="star"
         :class="{ off: !bookmarked }"

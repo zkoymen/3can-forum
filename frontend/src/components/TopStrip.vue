@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useWalletStore } from "../stores/wallet";
 import { useNotifications } from "../composables/useNotifications";
+import { BOARDS, normalizeBoard } from "../boards";
 import Identicon from "./Identicon.vue";
 import { shortAddr } from "../utils/format";
 
@@ -10,17 +11,18 @@ const wallet = useWalletStore();
 const notif = useNotifications();
 const route = useRoute();
 
-const boards = [
-  { tag: "3can", name: "Decentralized Forum", cur: true },
-  { tag: "g", name: "tech & code" },
-  { tag: "d", name: "design" },
-  { tag: "w3", name: "web3 & wallets" },
-  { tag: "a", name: "art & media" },
-  { tag: "p", name: "philosophy" },
-  { tag: "r", name: "random" },
-];
+// The "3can" tab (slug "") is the all view at /; the rest link to /b/<slug>.
+const boards = [{ slug: "", tag: "3can" }, ...BOARDS.map((b) => ({ slug: b.slug, tag: b.slug }))];
 
+const activeBoard = computed(() => normalizeBoard(route.params.board));
 const isHome = computed(() => route.name === "home");
+function isCurrent(slug) {
+  if (slug === "") return isHome.value;
+  return route.name === "board" && activeBoard.value === slug;
+}
+function linkFor(slug) {
+  return slug === "" ? "/" : `/b/${slug}`;
+}
 
 const needsInstall = computed(
   () => !!wallet.error && /not detected|install/i.test(wallet.error)
@@ -45,7 +47,7 @@ async function enableNotifications() {
       <span class="bk">[</span>
       <template v-for="(b, i) in boards" :key="b.tag">
         <span v-if="i > 0" class="sl">/</span>
-        <RouterLink to="/" :class="{ cur: b.cur && isHome }">{{ b.tag }}</RouterLink>
+        <RouterLink :to="linkFor(b.slug)" :class="{ cur: isCurrent(b.slug) }">{{ b.tag }}</RouterLink>
       </template>
       <span class="bk">]</span>
     </span>
