@@ -21,6 +21,11 @@ function isNetworkError(e) {
     m.includes("too many requests") ||
     m.includes("rate limit") ||
     m.includes("429") ||
+    // publicnode now 403s archive getLogs with "Archive requests require a
+    // personal token". Treat as retryable so we rotate to a provider that
+    // serves the full range (tenderly) instead of surfacing the 403.
+    m.includes("personal token") ||
+    m.includes("archive request") ||
     // getLogs range/size caps (e.g. Alchemy free tier's 10-block limit, Infura's
     // 10k-result cap). Treat as retryable so we rotate to a provider that allows
     // our chunk size instead of surfacing the error.

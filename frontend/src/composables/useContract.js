@@ -7,16 +7,20 @@ import config from "../config.json";
 // Sepolia, pinned so ethers never re-runs eth_chainId network detection.
 const SEPOLIA = Network.from(11155111);
 
-// Read providers, in priority order. The public nodes lead because they handle
-// our wide eth_getLogs scans fast (publicnode up to 50k blocks, tenderly the
-// whole range). A dedicated RPC via VITE_SEPOLIA_RPC_URL goes LAST as a deep
+// Read providers, in priority order. tenderly leads because it serves our wide
+// eth_getLogs scans across the FULL deploy->head range (which is archive data)
+// with no token. A dedicated RPC via VITE_SEPOLIA_RPC_URL goes LAST as a deep
 // fallback: the common free tiers (e.g. Alchemy's 10-block getLogs cap) can't
 // serve the event scans and only add failover latency on the hot path, so they
 // must not lead. rotateReadProvider() advances to the next on a network error.
 const ENV_RPC = import.meta.env.VITE_SEPOLIA_RPC_URL;
 const FALLBACK_RPCS = [
-  "https://ethereum-sepolia-rpc.publicnode.com", // up to 50k blocks per getLogs
   "https://sepolia.gateway.tenderly.co", // handles the full deploy->head range
+  // publicnode used to lead (50k blocks/getLogs) but now 403s any archive
+  // getLogs with "Archive requests require a personal token" — our deploy->head
+  // scans are archive, so it can no longer serve the hot path. Kept as a
+  // secondary for recent-range/state calls only.
+  "https://ethereum-sepolia-rpc.publicnode.com",
   ...(ENV_RPC ? [ENV_RPC] : []), // dedicated RPC: deep fallback only
   // NOTE: eth-sepolia.public.blastapi.io was removed — Blast API shut down and
   // now returns "Blast API is no longer available" for every request.
