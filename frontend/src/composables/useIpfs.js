@@ -31,6 +31,15 @@ async function fetchWithTimeout(url, ms) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Module-level cache: IPFS content is immutable (a CID *is* its content hash),
+// so a body never changes and is safe to keep forever. This dedupes the fetch
+// between components — e.g. the home catalog resolving thread boards and each
+// ThreadCard rendering its title now share one request per CID — and makes
+// revisiting a thread instant. In-flight promises are cached too so N callers
+// racing for the same CID collapse to a single network round.
+const jsonCache = new Map(); // cid -> parsed json
+const inFlight = new Map(); // cid -> Promise<parsed json>
+
 export function useIpfs() {
   async function upload(json) {
     if (!PINATA_JWT) {
@@ -74,7 +83,7 @@ export function useIpfs() {
     return Promise.any(attempts);
   }
 
-  async function fetchJson(cid) {
+  async function fetchOnce(cid) {
     try {
       return await raceGateways(cid);
     } catch {
@@ -88,6 +97,21 @@ export function useIpfs() {
         throw err instanceof Error ? err : new Error(`Failed to fetch CID ${cid}`);
       }
     }
+  }
+
+  function fetchJson(cid) {
+    if (jsonCache.has(cid)) return Promise.resolve(jsonCache.get(cid));
+    if (inFlight.has(cid)) return inFlight.get(cid);
+    const p = fetchOnce(cid)
+      .then((data) => {
+        jsonCache.set(cid, data);
+        return data;
+      })
+      .finally(() => {
+        inFlight.delete(cid);
+      });
+    inFlight.set(cid, p);
+    return p;
   }
 
   function gatewayUrl(cid) {

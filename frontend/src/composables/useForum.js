@@ -5,6 +5,8 @@ import {
   FALLBACK_RPC_COUNT,
 } from "./useContract";
 import { queryFilterChunked } from "./useEventQuery";
+import { useIpfs } from "./useIpfs";
+import { normalizeBoard } from "../boards";
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 
@@ -56,11 +58,14 @@ function isMissingThreadRevert(e) {
  */
 export function useForum() {
   const { readContract, deployBlock, contractAddress } = useContract();
+  const ipfs = useIpfs();
 
   const threads = ref([]);
   const posts = ref([]); // current thread's posts
   const votesByPostId = ref({}); // postId (string) -> count
   const postCountByThread = ref({}); // threadId (string) -> reply count
+  const boardById = ref({}); // threadId (string) -> board slug ("" = none/legacy)
+  const boardsResolved = ref(false); // true once every listed thread's board is known
   const loading = ref(false);
   const error = ref(null);
 
@@ -106,6 +111,34 @@ export function useForum() {
     } finally {
       if (attempt === 0) loading.value = false;
     }
+  }
+
+  /**
+   * A thread's board isn't on-chain — it's a field in its pinned IPFS JSON. Fetch
+   * every current thread's body (served from useIpfs's cache, so this shares the
+   * exact requests ThreadCard makes — no extra network) and build threadId->slug.
+   * Runs in the background after loadThreads; the "all" view never waits on it,
+   * and a specific board view fills in as boardsResolved flips true. A body that
+   * can't be fetched, or has no valid board, maps to "" (legacy/none) and only
+   * ever shows on the all view.
+   */
+  async function resolveBoards() {
+    boardsResolved.value = false;
+    const snapshot = threads.value;
+    const results = await Promise.all(
+      snapshot.map(async (t) => {
+        try {
+          const json = await ipfs.fetchJson(t.cid);
+          return [t.threadId, normalizeBoard(json?.board)];
+        } catch {
+          return [t.threadId, ""];
+        }
+      })
+    );
+    const map = { ...boardById.value };
+    for (const [id, slug] of results) map[id] = slug;
+    boardById.value = map;
+    boardsResolved.value = true;
   }
 
   /**
@@ -255,6 +288,18 @@ export function useForum() {
         },
         ...threads.value,
       ];
+      // Resolve the newcomer's board so it lands in the right filtered view.
+      ipfs
+        .fetchJson(cid)
+        .then((json) => {
+          boardById.value = {
+            ...boardById.value,
+            [id]: normalizeBoard(json?.board),
+          };
+        })
+        .catch(() => {
+          boardById.value = { ...boardById.value, [id]: "" };
+        });
     };
     c.on(filter, handler);
     return () => {
@@ -315,9 +360,12 @@ export function useForum() {
     posts,
     votesByPostId,
     postCountByThread,
+    boardById,
+    boardsResolved,
     loading,
     error,
     loadThreads,
+    resolveBoards,
     fetchThreadMeta,
     loadPostsForThread,
     loadVotesFor,
